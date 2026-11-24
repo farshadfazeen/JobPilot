@@ -25,5 +25,11 @@ Thumbs.db
 *.sqlite
 *.sqlite-journal
 
+# Generated Prisma helper files
+apps/api/.agents/
+apps/api/.claude/
+apps/api/.windsurf/
+apps/api/skills-lock.json
+
 # Generated Prisma Client
 apps/api/generated/
