@@ -24,3 +24,6 @@ Thumbs.db
 # Local files
 *.sqlite
 *.sqlite-journal
+
+# Generated Prisma Client
+apps/api/generated/
