@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -55,6 +55,7 @@ model User {
   companies    Company[]
   applications Application[]
   contacts     Contact[]
+  sessions     Session[]
 
   @@map("users")
 }
@@ -177,4 +178,20 @@ model Contact {
   @@index([ownerId])
   @@index([companyId])
   @@map("contacts")
+}
+
+// Authentication sessions
+
+model Session {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }

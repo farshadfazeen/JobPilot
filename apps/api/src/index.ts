@@ -1,26 +1,32 @@
-import express from "express";
-import cors from "cors";
-import "dotenv/config";
 
-const app = express();
-const PORT = Number(process.env.PORT) || 5000;
+import { app } from "./app.js";
+import { env } from "./config/env.js";
+import { prisma } from "./lib/prisma.js";
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true,
-  })
-);
-app.use(express.json());
+async function startServer() {
+  try {
+    await prisma.$connect();
+    console.log("PostgreSQL connected successfully");
 
-app.get("/api/v1/health", (_req, res) => {
-  res.status(200).json({
-    status: "ok",
-    application: "JobPilot API",
-    timestamp: new Date().toISOString(),
-  });
-});
+    const server = app.listen(env.PORT, () => {
+      console.log(
+        `JobPilot API running at http://localhost:${env.PORT}`
+      );
+    });
 
-app.listen(PORT, () => {
-  console.log(`JobPilot API running at http://localhost:${PORT}`);
-});
+    const shutdown = () => {
+      server.close(() => {
+        void prisma.$disconnect().then(() => process.exit(0));
+      });
+    };
+
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    await prisma.$disconnect();
+    process.exitCode = 1;
+  }
+}
+
+void startServer();
