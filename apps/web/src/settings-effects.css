@@ -1,0 +1,35 @@
+
+/* JobPilot browser preference effects */
+
+html[data-jp-reduce-motion="true"] *,
+html[data-jp-reduce-motion="true"] *::before,
+html[data-jp-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+html[data-jp-compact="true"] .jp-card {
+  padding: 14px;
+}
+
+html[data-jp-compact="true"] .jp-input {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Only elements explicitly marked as salary fields are masked. */
+html[data-jp-hide-salaries="true"] [data-jobpilot-salary] {
+  filter: blur(8px);
+}
+
+html[data-jp-hide-salaries="true"] [data-jobpilot-salary]:focus-visible {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+}

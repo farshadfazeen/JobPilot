@@ -16,25 +16,37 @@ import {
 } from "../../utils/request.js";
 
 export const applicationsRouter = Router();
+
 applicationsRouter.use(requireAuth);
 
 const statusSchema = z.enum([
-  "SAVED", "APPLIED", "SCREENING", "INTERVIEW",
-  "OFFER", "REJECTED", "WITHDRAWN", "ACCEPTED",
+  "SAVED",
+  "APPLIED",
+  "SCREENING",
+  "INTERVIEW",
+  "OFFER",
+  "REJECTED",
+  "WITHDRAWN",
+  "ACCEPTED",
 ]);
 
-const applicationSchema = z.object({
+const applicationFields = z.object({
   jobTitle: requiredText(200),
   companyId: z.uuid(),
   jobUrl: z.url().nullable().optional(),
   description: optionalText(20000),
   status: statusSchema.default("SAVED"),
   jobType: z.enum([
-    "FULL_TIME", "PART_TIME", "INTERNSHIP",
-    "CONTRACT", "FREELANCE",
+    "FULL_TIME",
+    "PART_TIME",
+    "INTERNSHIP",
+    "CONTRACT",
+    "FREELANCE",
   ]).nullable().optional(),
   workMode: z.enum([
-    "REMOTE", "HYBRID", "ONSITE",
+    "REMOTE",
+    "HYBRID",
+    "ONSITE",
   ]).nullable().optional(),
   location: optionalText(200),
   salaryMin: z.number().nonnegative().nullable().optional(),
@@ -43,17 +55,37 @@ const applicationSchema = z.object({
     .nullable().optional(),
   appliedAt: dateValue.nullable().optional(),
   deadline: dateValue.nullable().optional(),
-}).strict().refine(
-  (value) =>
-    value.salaryMin == null ||
-    value.salaryMax == null ||
-    value.salaryMax >= value.salaryMin,
-  { message: "Maximum salary cannot be lower than minimum salary" }
+}).strict();
+
+const salaryValidation = (
+  value: {
+    salaryMin?: number | null;
+    salaryMax?: number | null;
+  }
+) =>
+  value.salaryMin == null ||
+  value.salaryMax == null ||
+  value.salaryMax >= value.salaryMin;
+
+const applicationSchema = applicationFields.refine(
+  salaryValidation,
+  {
+    message: "Maximum salary cannot be lower than minimum salary",
+  }
 );
 
-async function ownedApplication(id: string, ownerId: string) {
+// PATCH must use a partial schema BEFORE refinements.
+const updateApplicationSchema = applicationFields.partial();
+
+async function ownedApplication(
+  id: string,
+  ownerId: string
+) {
   const application = await prisma.application.findFirst({
-    where: { id, ownerId },
+    where: {
+      id,
+      ownerId,
+    },
   });
 
   if (!application) {
@@ -63,9 +95,15 @@ async function ownedApplication(id: string, ownerId: string) {
   return application;
 }
 
-async function verifyCompany(id: string, ownerId: string) {
+async function verifyCompany(
+  id: string,
+  ownerId: string
+) {
   const company = await prisma.company.findFirst({
-    where: { id, ownerId },
+    where: {
+      id,
+      ownerId,
+    },
   });
 
   if (!company) {
@@ -73,6 +111,7 @@ async function verifyCompany(id: string, ownerId: string) {
   }
 }
 
+// GET ALL APPLICATIONS
 applicationsRouter.get("/", async (req, res) => {
   const filters = z.object({
     page: paginationSchema.shape.page,
@@ -81,35 +120,67 @@ applicationsRouter.get("/", async (req, res) => {
     companyId: z.uuid().optional(),
     search: z.string().max(200).optional(),
     sortBy: z.enum([
-      "createdAt", "updatedAt", "deadline", "jobTitle",
+      "createdAt",
+      "updatedAt",
+      "deadline",
+      "jobTitle",
     ]).default("createdAt"),
-    order: z.enum(["asc", "desc"]).default("desc"),
+    order: z.enum([
+      "asc",
+      "desc",
+    ]).default("desc"),
   }).parse(req.query);
 
   const {
-    page, limit, status, companyId, search, sortBy, order,
+    page,
+    limit,
+    status,
+    companyId,
+    search,
+    sortBy,
+    order,
   } = filters;
 
   const where: Prisma.ApplicationWhereInput = {
     ownerId: res.locals.user.id,
     ...(status ? { status } : {}),
     ...(companyId ? { companyId } : {}),
-    ...(search ? {
-      OR: [
-        { jobTitle: { contains: search, mode: "insensitive" } },
-        { company: { name: { contains: search, mode: "insensitive" } } },
-      ],
-    } : {}),
+    ...(search
+      ? {
+          OR: [
+            {
+              jobTitle: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              company: {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          ],
+        }
+      : {}),
   };
 
   const [applications, total] = await prisma.$transaction([
     prisma.application.findMany({
       where,
-      include: { company: true },
-      orderBy: { [sortBy]: order },
+      include: {
+        company: true,
+      },
+      orderBy: {
+        [sortBy]: order,
+      },
       ...pagination(page, limit),
     }),
-    prisma.application.count({ where }),
+    prisma.application.count({
+      where,
+    }),
   ]);
 
   res.json({
@@ -119,17 +190,33 @@ applicationsRouter.get("/", async (req, res) => {
   });
 });
 
+// GET SINGLE APPLICATION
 applicationsRouter.get("/:id", async (req, res) => {
   const id = idSchema.parse(req.params.id);
   const ownerId = res.locals.user.id;
 
   const application = await prisma.application.findFirst({
-    where: { id, ownerId },
+    where: {
+      id,
+      ownerId,
+    },
     include: {
       company: true,
-      notes: { orderBy: { createdAt: "desc" } },
-      interviews: { orderBy: { scheduledAt: "asc" } },
-      statusHistory: { orderBy: { changedAt: "desc" } },
+      notes: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+      interviews: {
+        orderBy: {
+          scheduledAt: "asc",
+        },
+      },
+      statusHistory: {
+        orderBy: {
+          changedAt: "desc",
+        },
+      },
     },
   });
 
@@ -137,46 +224,66 @@ applicationsRouter.get("/:id", async (req, res) => {
     throw new AppError(404, "Application not found");
   }
 
-  res.json({ success: true, data: application });
+  res.json({
+    success: true,
+    data: application,
+  });
 });
 
+// CREATE APPLICATION
 applicationsRouter.post("/", async (req, res) => {
   const input = applicationSchema.parse(req.body);
   const ownerId = res.locals.user.id;
 
   await verifyCompany(input.companyId, ownerId);
 
-  const { appliedAt, deadline, ...fields } = input;
+  const {
+    appliedAt,
+    deadline,
+    ...fields
+  } = input;
 
-  const application = await prisma.$transaction(async (tx) => {
-    const created = await tx.application.create({
-      data: {
-        ...fields,
-        ownerId,
-        appliedAt: appliedAt ? new Date(appliedAt) : null,
-        deadline: deadline ? new Date(deadline) : null,
-      },
-    });
+  const application = await prisma.$transaction(
+    async (tx) => {
+      const created = await tx.application.create({
+        data: {
+          ...fields,
+          ownerId,
+          appliedAt: appliedAt
+            ? new Date(appliedAt)
+            : null,
+          deadline: deadline
+            ? new Date(deadline)
+            : null,
+        },
+      });
 
-    await tx.statusHistory.create({
-      data: {
-        applicationId: created.id,
-        toStatus: created.status,
-        reason: "Application created",
-      },
-    });
+      await tx.statusHistory.create({
+        data: {
+          applicationId: created.id,
+          toStatus: created.status,
+          reason: "Application created",
+        },
+      });
 
-    return created;
+      return created;
+    }
+  );
+
+  res.status(201).json({
+    success: true,
+    data: application,
   });
-
-  res.status(201).json({ success: true, data: application });
 });
 
+// UPDATE APPLICATION
+// Works for both Pipeline drag-and-drop
+// and editing applications.
 applicationsRouter.patch("/:id", async (req, res) => {
   const id = idSchema.parse(req.params.id);
   const ownerId = res.locals.user.id;
-  const input = applicationSchema.safeExtend({})
-    .partial().parse(req.body);
+
+  const input = updateApplicationSchema.parse(req.body);
 
   const existing = await ownedApplication(id, ownerId);
 
@@ -184,54 +291,118 @@ applicationsRouter.patch("/:id", async (req, res) => {
     await verifyCompany(input.companyId, ownerId);
   }
 
-  const { appliedAt, deadline, ...fields } = input;
+  const {
+    appliedAt,
+    deadline,
+    ...fields
+  } = input;
+
+  // Validate salary range using the existing values
+  // when a PATCH changes only one salary field.
+  const salaryMin =
+    input.salaryMin !== undefined
+      ? input.salaryMin
+      : existing.salaryMin === null
+        ? null
+        : Number(existing.salaryMin);
+
+  const salaryMax =
+    input.salaryMax !== undefined
+      ? input.salaryMax
+      : existing.salaryMax === null
+        ? null
+        : Number(existing.salaryMax);
+
+  if (
+    salaryMin !== null &&
+    salaryMax !== null &&
+    salaryMax < salaryMin
+  ) {
+    throw new AppError(
+      400,
+      "Maximum salary cannot be lower than minimum salary"
+    );
+  }
 
   const data = {
     ...fields,
     ...(appliedAt !== undefined
-      ? { appliedAt: appliedAt ? new Date(appliedAt) : null }
+      ? {
+          appliedAt: appliedAt
+            ? new Date(appliedAt)
+            : null,
+        }
       : {}),
     ...(deadline !== undefined
-      ? { deadline: deadline ? new Date(deadline) : null }
+      ? {
+          deadline: deadline
+            ? new Date(deadline)
+            : null,
+        }
       : {}),
   };
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.application.updateMany({
-      where: { id, ownerId },
-      data,
-    });
+  const updated = await prisma.$transaction(
+    async (tx) => {
+      const result = await tx.application.updateMany({
+        where: {
+          id,
+          ownerId,
+        },
+        data,
+      });
 
-    if (!result.count) {
-      throw new AppError(404, "Application not found");
-    }
+      if (!result.count) {
+        throw new AppError(
+          404,
+          "Application not found"
+        );
+      }
 
-    if (input.status && input.status !== existing.status) {
-      await tx.statusHistory.create({
-        data: {
-          applicationId: id,
-          fromStatus: existing.status,
-          toStatus: input.status,
-          reason: "Status updated",
+      if (
+        input.status &&
+        input.status !== existing.status
+      ) {
+        await tx.statusHistory.create({
+          data: {
+            applicationId: id,
+            fromStatus: existing.status,
+            toStatus: input.status,
+            reason: "Status updated",
+          },
+        });
+      }
+
+      return tx.application.findUniqueOrThrow({
+        where: {
+          id,
         },
       });
     }
+  );
 
-    return tx.application.findUniqueOrThrow({ where: { id } });
+  res.json({
+    success: true,
+    data: updated,
   });
-
-  res.json({ success: true, data: updated });
 });
 
+// DELETE APPLICATION
 applicationsRouter.delete("/:id", async (req, res) => {
   const id = idSchema.parse(req.params.id);
 
   const deleted = await prisma.application.deleteMany({
-    where: { id, ownerId: res.locals.user.id },
+    where: {
+      id,
+      ownerId: res.locals.user.id,
+    },
   });
 
   if (!deleted.count) {
-    throw new AppError(404, "Application not found");
+    throw new AppError(
+      404,
+      "Application not found"
+    );
   }
 
   res.json({
